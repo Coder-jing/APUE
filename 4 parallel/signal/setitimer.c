@@ -1,0 +1,96 @@
+#include<stdio.h>
+#include<stdlib.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<fcntl.h>
+#include<unistd.h>
+#include<signal.h>
+#include<errno.h>
+#include<sys/time.h>
+
+
+#define CPS     10
+#define BUFSIZE CPS
+
+static int LOOP=0;
+static void sig_handler(int s)
+{
+//    alarm(1);
+    LOOP=1;
+    
+}
+
+int main(int argc,char** argv)
+{
+    if(argc<2)
+    {
+        fprintf(stderr,"Usage...\n");
+        exit(1);
+    }
+
+    struct itimerval* itm;
+    itm->it_interval.tv_sec=1;
+    itm->it_interval.tv_usec=0;
+    itm->it_value.tv_sec=1;
+    itm->it_value.tv_usec=0;
+    char buf[BUFSIZE];
+    int sfd;
+
+    do
+    {
+        sfd=open(argv[1],O_RDONLY);
+        if(sfd<0)
+        {
+            if(errno!=EINTR)
+            {
+                perror("open()");
+                exit(1);
+            }
+        }
+    }while(sfd<0);
+
+
+    int len=0;
+    while(1)
+    {
+        while((len=read(sfd,buf,BUFSIZE))<0)
+        {  
+            if(errno==EINTR)
+                continue; 
+            perror("read()");
+            exit(1);
+        }
+        if(len==0)
+        {
+            break;
+        }
+        
+
+        signal(SIGALRM,sig_handler);
+        //alarm(1);
+        setitimer(ITIMER_REAL,itm,NULL);
+
+        while(!LOOP)
+        {
+            pause();
+        }
+        LOOP=0;
+        int pos=0;
+        int ret=0;
+        while(len>0)
+        {
+            ret=write(1,buf+pos,len);
+            if(ret<0)
+            {
+                if(errno==EINTR)
+                continue; 
+                perror("write()");
+                exit(1);
+            }
+            pos+=ret;
+            len-=ret;
+        }
+    }
+    close(sfd);
+    exit(0);
+}
